@@ -108,14 +108,12 @@ const weightItems: Array<{
 
 const layerNames: Record<string, string> = {
   greenSpaces: 'فضای سبز',
-  pollution: 'آلودگی',
   roads: 'راه‌ها',
   industries: 'مراکز صنعتی'
 }
 
 const layerIcons: Record<string, Component> = {
   greenSpaces: PhTree,
-  pollution: PhCloudFog,
   roads: PhRoadHorizon,
   industries: PhFactory
 }

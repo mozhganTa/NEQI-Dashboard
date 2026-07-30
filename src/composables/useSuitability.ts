@@ -10,8 +10,12 @@ export function useSuitability(blocks: BlockProperties[]) {
     const industryDistances = blocks
       .map(block => Number(block.industryDistance))
       .filter(Number.isFinite)
-    const minIndustryDistance = Math.min(...industryDistances)
-    const maxIndustryDistance = Math.max(...industryDistances)
+    const minIndustryDistance = industryDistances.length > 0
+      ? Math.min(...industryDistances)
+      : 0
+    const maxIndustryDistance = industryDistances.length > 0
+      ? Math.max(...industryDistances)
+      : 0
     const industryDistanceRange = maxIndustryDistance - minIndustryDistance
     const toRatio = (value: number) => Math.min(1, Math.max(0, Number(value) / 100))
 
@@ -19,8 +23,9 @@ export function useSuitability(blocks: BlockProperties[]) {
       // نرمال‌سازی امتیازات به بازه 0-1
       const normalizedPollution = 1 - toRatio(block.pollutionScore) // معکوس
       // فاصله صنعت در داده بر حسب فاصله است، نه یک امتیاز 0 تا 100.
-      const normalizedIndustry = industryDistanceRange > 0
-        ? (block.industryDistance - minIndustryDistance) / industryDistanceRange
+      const industryDistance = Number(block.industryDistance)
+      const normalizedIndustry = Number.isFinite(industryDistance) && industryDistanceRange > 0
+        ? (industryDistance - minIndustryDistance) / industryDistanceRange
         : 0.5
       const normalizedGreen = toRatio(block.greenDensity)
       const normalizedRoad = toRatio(block.roadAccessibility)
@@ -49,7 +54,7 @@ export function useSuitability(blocks: BlockProperties[]) {
         name: block.name,
         scores: {
           pollution: block.pollutionScore,
-          industryDistance: block.industryDistance,
+          industryDistance: Math.round(normalizedIndustry * 100),
           greenDensity: block.greenDensity,
           roadAccessibility: block.roadAccessibility
         },

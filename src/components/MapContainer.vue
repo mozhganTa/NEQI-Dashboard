@@ -43,12 +43,6 @@
         @ready="onRoadsReady"
       />
 
-      <!-- ✅ لایه آلودگی (نقاط گرم) -->
-      <l-geo-json
-        v-if="pollutionData && pollutionData.features && pollutionData.features.length > 0 && activeLayers.pollution"
-        :geojson="pollutionData"
-        :options="pollutionOptions"
-      />
     </l-map>
     
     <!-- پاپ‌آپ اطلاعات بلوک -->
@@ -118,7 +112,6 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
 import { PhCloudFog, PhFactory, PhRoadHorizon, PhTree, PhX } from '@phosphor-icons/vue'
-import { circleMarker } from 'leaflet'
 import { useMapStore } from '@/stores/mapStore'
 import { useWeightsStore } from '@/stores/weightsStore'
 import { useSuitability } from '@/composables/useSuitability'
@@ -139,7 +132,6 @@ const blocksData = ref<any>(null)
 const roadsData = ref<any>(null)
 const greenSpacesData = ref<any>(null)
 const industriesData = ref<any>(null)
-const pollutionData = ref<any>(null)
 
 // ============================================
 // وضعیت‌ها
@@ -233,25 +225,6 @@ function industryStyle() {
   }
 }
 
-// ============================================
-// ✅ آپشن‌های لایه آلودگی (نقطه‌ای - قرمز/نارنجی)
-// ============================================
-const pollutionOptions = {
-  pointToLayer: (feature: any, latlng: any) => {
-    // امتیاز آلودگی برای تعیین اندازه و رنگ
-    const score = feature.properties?.value || feature.properties?.pollution || 50
-    const radius = 5 + (score / 100) * 15  // 5 تا 20
-    const color = score > 70 ? '#EF4444' : score > 40 ? '#F97316' : '#EAB308'
-    
-    return circleMarker(latlng, {
-      radius: radius,
-      fillColor: color,
-      fillOpacity: 0.7,
-      color: '#991B1B',
-      weight: 1
-    })
-  }
-}
 
 // ============================================
 // تابع انتخاب بلوک
@@ -267,7 +240,7 @@ function selectBlock(feature: any) {
     name: props.name,
     scores: {
       pollution: props.pollutionScore,
-      industryDistance: props.industryDistance,
+      industryDistance: props.industryDistanceScore ?? 0,
       greenDensity: props.greenDensity,
       roadAccessibility: props.roadAccessibility
     },
@@ -377,7 +350,8 @@ async function loadData() {
       const scoredBlocks = calculateScores.value
       
       blocksData.value.features.forEach((feature: any, index: number) => {
-        feature.properties.finalScore = scoredBlocks[index]?.finalScore || 50
+        feature.properties.finalScore = scoredBlocks[index]?.finalScore ?? 50
+        feature.properties.industryDistanceScore = scoredBlocks[index]?.scores.industryDistance ?? 0
       })
       
       console.log('✅ امتیازات محاسبه شد')
@@ -428,21 +402,7 @@ async function loadData() {
       industriesData.value = { type: 'FeatureCollection', features: [] }
     }
 
-    // ✅ بارگذاری آلودگی
-    try {
-      const pollutionResp = await fetch('/data/pollution.geojson')
-      if (pollutionResp.ok) {
-        pollutionData.value = await pollutionResp.json()
-        console.log('✅ لایه آلودگی بارگذاری شد:', pollutionData.value.features?.length || 0, 'نقطه')
-      } else {
-        console.warn('⚠️ لایه آلودگی پیدا نشد')
-        pollutionData.value = { type: 'FeatureCollection', features: [] }
-      }
-    } catch (error) {
-      console.warn('⚠️ خطا در بارگذاری آلودگی:', error)
-      pollutionData.value = { type: 'FeatureCollection', features: [] }
-    }
-    
+
     console.log('✅ بارگذاری کامل شد')
     
   } catch (error) {
@@ -460,7 +420,8 @@ watch(() => weightsStore.weights, () => {
     const scoredBlocks = calculateScores.value
     
     blocksData.value.features.forEach((feature: any, index: number) => {
-      feature.properties.finalScore = scoredBlocks[index]?.finalScore || 50
+      feature.properties.finalScore = scoredBlocks[index]?.finalScore ?? 50
+      feature.properties.industryDistanceScore = scoredBlocks[index]?.scores.industryDistance ?? 0
     })
     
     blocksData.value = { ...blocksData.value }

@@ -8,7 +8,6 @@ export const useMapStore = defineStore('map', () => {
   // ✅ وضعیت لایه‌های فعال
   const activeLayers = ref({
     greenSpaces: true,
-    pollution: true,
     roads: true,
     industries: true
   })
