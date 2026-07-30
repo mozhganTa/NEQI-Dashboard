@@ -1,5 +1,5 @@
-import { computed, ref } from 'vue'
-import type { BlockProperties, Weights, BlockDisplayInfo } from '@/types'
+import { computed } from 'vue'
+import type { BlockProperties, BlockDisplayInfo } from '@/types'
 import { useWeightsStore } from '@/stores/weightsStore'
 
 export function useSuitability(blocks: BlockProperties[]) {
@@ -7,12 +7,23 @@ export function useSuitability(blocks: BlockProperties[]) {
   
   // محاسبه امتیاز نهایی برای هر بلوک
   const calculateScores = computed(() => {
+    const industryDistances = blocks
+      .map(block => Number(block.industryDistance))
+      .filter(Number.isFinite)
+    const minIndustryDistance = Math.min(...industryDistances)
+    const maxIndustryDistance = Math.max(...industryDistances)
+    const industryDistanceRange = maxIndustryDistance - minIndustryDistance
+    const toRatio = (value: number) => Math.min(1, Math.max(0, Number(value) / 100))
+
     return blocks.map(block => {
       // نرمال‌سازی امتیازات به بازه 0-1
-      const normalizedPollution = 1 - (block.pollutionScore / 100) // معکوس
-      const normalizedIndustry = block.industryDistance / 100
-      const normalizedGreen = block.greenDensity / 100
-      const normalizedRoad = block.roadAccessibility / 100
+      const normalizedPollution = 1 - toRatio(block.pollutionScore) // معکوس
+      // فاصله صنعت در داده بر حسب فاصله است، نه یک امتیاز 0 تا 100.
+      const normalizedIndustry = industryDistanceRange > 0
+        ? (block.industryDistance - minIndustryDistance) / industryDistanceRange
+        : 0.5
+      const normalizedGreen = toRatio(block.greenDensity)
+      const normalizedRoad = toRatio(block.roadAccessibility)
       
       // محاسبه وزن‌دار
       const finalScore = 
@@ -30,7 +41,7 @@ export function useSuitability(blocks: BlockProperties[]) {
       } else if (finalScore >= 0.4) {
         recommendation = 'منطقه با مطلوبیت متوسط، نیاز به برنامه‌ریزی'
       } else {
-        recommendation = 'منطقه نامطلوب، نیاز به مداخله فوری ⚠️'
+        recommendation = 'منطقه نامطلوب، نیاز به مداخله فوری'
       }
       
       return {

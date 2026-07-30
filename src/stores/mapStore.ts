@@ -1,15 +1,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import type { BlockProperties, BlockDisplayInfo } from '@/types'
+import type { BlockDisplayInfo } from '@/types'
 
 export const useMapStore = defineStore('map', () => {
-  // بلوک انتخاب شده
   const selectedBlock = ref<BlockDisplayInfo | null>(null)
   
-  // لیست تمام بلوک‌ها با امتیاز نهایی
-  const allBlocks = ref<BlockDisplayInfo[]>([])
-  
-  // وضعیت لایه‌های فعال
+  // ✅ وضعیت لایه‌های فعال
   const activeLayers = ref({
     greenSpaces: true,
     pollution: true,
@@ -25,13 +21,14 @@ export const useMapStore = defineStore('map', () => {
     selectedBlock.value = null
   }
 
+  // ✅ تابع تغییر وضعیت لایه
   function toggleLayer(layerName: keyof typeof activeLayers.value) {
     activeLayers.value[layerName] = !activeLayers.value[layerName]
+    console.log(`✅ لایه ${layerName} شد:`, activeLayers.value[layerName])
   }
 
   return {
     selectedBlock,
-    allBlocks,
     activeLayers,
     setSelectedBlock,
     clearSelectedBlock,

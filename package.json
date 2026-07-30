@@ -8,7 +8,8 @@
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview"
   },
- "dependencies": {
+  "dependencies": {
+    "@phosphor-icons/vue": "^2.2.1",
     "@turf/turf": "^7.3.5",
     "@vue-leaflet/vue-leaflet": "^0.10.1",
     "@vueuse/core": "^14.3.0",

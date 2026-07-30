@@ -12,30 +12,54 @@
         attribution="&copy; OpenStreetMap contributors"
       />
       
-      <!-- ✅ لایه بلوک‌ها -->
+      <!-- ✅ لایه بلوک‌ها (فقط مرزها - بدون رنگ) -->
       <l-geo-json
         v-if="blocksData"
         :geojson="blocksData"
         :options="blocksOptions"
+        :options-style="blockStyle"
         @ready="onBlocksReady"
       />
       
-      <!-- ✅ لایه راه‌ها با z-index بالا (روی بلوک‌ها) -->
+      <!-- ✅ لایه فضای سبز -->
       <l-geo-json
-        v-if="roadsData && roadsData.features && roadsData.features.length > 0"
+        v-if="greenSpacesData && greenSpacesData.features && greenSpacesData.features.length > 0 && activeLayers.greenSpaces"
+        :geojson="greenSpacesData"
+        :options-style="greenSpaceStyle"
+      />
+
+      <!-- ✅ لایه مراکز صنعتی -->
+      <l-geo-json
+        v-if="industriesData && industriesData.features && industriesData.features.length > 0 && activeLayers.industries"
+        :geojson="industriesData"
+        :options-style="industryStyle"
+      />
+
+      <!-- ✅ لایه راه‌ها (ضخامت کم و بالاتر از پلی‌گون‌ها) -->
+      <l-geo-json
+        v-if="roadsData && roadsData.features && roadsData.features.length > 0 && activeLayers.roads"
         :geojson="roadsData"
-        :options="roadsOptions"
-        :z-index="1000"
+        :options-style="roadStyle"
+        @ready="onRoadsReady"
+      />
+
+      <!-- ✅ لایه آلودگی (نقاط گرم) -->
+      <l-geo-json
+        v-if="pollutionData && pollutionData.features && pollutionData.features.length > 0 && activeLayers.pollution"
+        :geojson="pollutionData"
+        :options="pollutionOptions"
       />
     </l-map>
     
     <!-- پاپ‌آپ اطلاعات بلوک -->
     <div v-if="selectedBlock" class="custom-popup">
-      <button class="close-btn" @click.stop="clearSelectedBlock">✕</button>
+      <button class="close-btn" aria-label="بستن" @click.stop="clearSelectedBlock">
+        <PhX :size="18" weight="bold" />
+      </button>
       <h3>{{ selectedBlock.name }}</h3>
       <div class="score-grid">
         <div class="score-item">
-          <span>🌿 فضای سبز</span>
+          <span class="score-label"><PhTree :size="17" weight="duotone" /> فضای سبز</span>
           <div class="progress-bar">
             <div 
               class="progress-fill"
@@ -46,7 +70,7 @@
           <span class="score-value">{{ selectedBlock.scores.greenDensity }}%</span>
         </div>
         <div class="score-item">
-          <span>☣️ آلودگی</span>
+          <span class="score-label"><PhCloudFog :size="17" weight="duotone" /> آلودگی</span>
           <div class="progress-bar">
             <div 
               class="progress-fill"
@@ -57,7 +81,7 @@
           <span class="score-value">{{ selectedBlock.scores.pollution }}%</span>
         </div>
         <div class="score-item">
-          <span>🏭 فاصله از صنایع</span>
+          <span class="score-label"><PhFactory :size="17" weight="duotone" /> فاصله از صنایع</span>
           <div class="progress-bar">
             <div 
               class="progress-fill"
@@ -68,7 +92,7 @@
           <span class="score-value">{{ selectedBlock.scores.industryDistance }}%</span>
         </div>
         <div class="score-item">
-          <span>🚗 دسترسی به راه</span>
+          <span class="score-label"><PhRoadHorizon :size="17" weight="duotone" /> دسترسی به راه</span>
           <div class="progress-bar">
             <div 
               class="progress-fill"
@@ -93,6 +117,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { LMap, LTileLayer, LGeoJson } from '@vue-leaflet/vue-leaflet'
+import { PhCloudFog, PhFactory, PhRoadHorizon, PhTree, PhX } from '@phosphor-icons/vue'
+import { circleMarker } from 'leaflet'
 import { useMapStore } from '@/stores/mapStore'
 import { useWeightsStore } from '@/stores/weightsStore'
 import { useSuitability } from '@/composables/useSuitability'
@@ -111,6 +137,9 @@ const weightsStore = useWeightsStore()
 // ============================================
 const blocksData = ref<any>(null)
 const roadsData = ref<any>(null)
+const greenSpacesData = ref<any>(null)
+const industriesData = ref<any>(null)
+const pollutionData = ref<any>(null)
 
 // ============================================
 // وضعیت‌ها
@@ -122,47 +151,43 @@ const selectedBlock = computed(() => mapStore.selectedBlock)
 let isClickOnBlock = false
 
 // ============================================
-// آپشن‌های لایه بلوک‌ها
+// ✅ رنگ‌بندی بلوک‌ها بر اساس امتیاز نهایی مطلوبیت
 // ============================================
+function blockStyle(feature?: any) {
+  const score = Number(feature?.properties?.finalScore ?? 0)
+
+  return {
+    fill: true,
+    fillColor: getColorByScore(score),
+    fillOpacity: 0.48,
+    color: '#374151',
+    opacity: 0.9,
+    weight: 1.2
+  }
+}
+
 const blocksOptions = computed(() => {
   if (!blocksData.value) return {}
-  
+
   return {
-    style: (feature: any) => {
-      const score = feature.properties.finalScore || 50
-      return {
-        fillColor: getColorByScore(score),
-        fillOpacity: 0.5,
-        color: '#333',
-        weight: 1
-      }
-    },
     onEachFeature: (feature: any, layer: any) => {
       layer.on({
         click: (e: any) => {
           if (e.originalEvent) {
             e.originalEvent.stopPropagation()
           }
-          selectBlock(feature, layer, e)
+          selectBlock(feature)
         },
         mouseover: (e: any) => {
           const layer = e.target
           layer.setStyle({
-            weight: 3,
             color: '#000',
-            fillOpacity: 0.8
+            weight: 2,
+            fillOpacity: 0.68
           })
-          layer.bringToFront()
         },
         mouseout: (e: any) => {
-          const layer = e.target
-          const score = feature.properties.finalScore || 50
-          layer.setStyle({
-            weight: 1,
-            color: '#333',
-            fillOpacity: 0.5,
-            fillColor: getColorByScore(score)
-          })
+          e.target.setStyle(blockStyle(feature))
         }
       })
     }
@@ -170,21 +195,68 @@ const blocksOptions = computed(() => {
 })
 
 // ============================================
-// آپشن‌های لایه راه‌ها
+// ✅ آپشن‌های لایه راه‌ها (ضخامت کم)
 // ============================================
-const roadsOptions = {
-  style: {
-    color: '#3B82F6',     // آبی
-    weight: 3,
-    opacity: 1,
-    smoothFactor: 1
+function roadStyle() {
+  return {
+    color: '#475569',
+    weight: 0.55,
+    opacity: 0.72,
+    lineCap: 'round' as const,
+    lineJoin: 'round' as const
+  }
+}
+
+// ============================================
+// آپشن‌های لایه فضای سبز (چندضلعی - سبز)
+// ============================================
+function greenSpaceStyle() {
+  return {
+    fillColor: '#22c55e',
+    fillOpacity: 0.55,
+    color: '#15803d',
+    weight: 0.8,
+    opacity: 0.9
+  }
+}
+
+// ============================================
+// آپشن‌های لایه مراکز صنعتی (نقطه‌ای - بنفش)
+// ============================================
+function industryStyle() {
+  return {
+    fillColor: '#8b5cf6',
+    fillOpacity: 0.62,
+    color: '#5b21b6',
+    weight: 1,
+    opacity: 0.95
+  }
+}
+
+// ============================================
+// ✅ آپشن‌های لایه آلودگی (نقطه‌ای - قرمز/نارنجی)
+// ============================================
+const pollutionOptions = {
+  pointToLayer: (feature: any, latlng: any) => {
+    // امتیاز آلودگی برای تعیین اندازه و رنگ
+    const score = feature.properties?.value || feature.properties?.pollution || 50
+    const radius = 5 + (score / 100) * 15  // 5 تا 20
+    const color = score > 70 ? '#EF4444' : score > 40 ? '#F97316' : '#EAB308'
+    
+    return circleMarker(latlng, {
+      radius: radius,
+      fillColor: color,
+      fillOpacity: 0.7,
+      color: '#991B1B',
+      weight: 1
+    })
   }
 }
 
 // ============================================
 // تابع انتخاب بلوک
 // ============================================
-function selectBlock(feature: any, layer: any, event: any) {
+function selectBlock(feature: any) {
   isClickOnBlock = true
   
   const props = feature.properties
@@ -237,7 +309,7 @@ function getRecommendation(score: number): string {
   if (score >= 80) return 'منطقه بسیار مطلوب برای سکونت ✓'
   if (score >= 60) return 'منطقه نسبتاً مطلوب، نیاز به بهبود جزئی'
   if (score >= 40) return 'منطقه با مطلوبیت متوسط، نیاز به برنامه‌ریزی'
-  return 'منطقه نامطلوب، نیاز به مداخله فوری ⚠️'
+  return 'منطقه نامطلوب، نیاز به مداخله فوری'
 }
 
 // ============================================
@@ -258,16 +330,14 @@ function clearSelectedBlock() {
 }
 
 // ============================================
-// تابع onBlocksReady - لایه راه‌ها را به جلو می‌آورد
+// تابع onBlocksReady
 // ============================================
 function onBlocksReady() {
   console.log('✅ بلوک‌ها بارگذاری شدند')
   
-  // بعد از بارگذاری، لایه راه‌ها را به جلو بیاور
   setTimeout(() => {
     if (mapRef.value?.leafletObject) {
       const map = mapRef.value.leafletObject
-      let roadsLayerFound = false
       
       map.eachLayer((layer: any) => {
         if (layer._geojson && layer._geojson.features && layer._geojson.features.length > 0) {
@@ -276,30 +346,16 @@ function onBlocksReady() {
               (firstFeature.geometry.type === 'LineString' || 
                firstFeature.geometry.type === 'MultiLineString')) {
             layer.bringToFront()
-            roadsLayerFound = true
             console.log('✅ لایه راه‌ها به جلو آورده شد')
           }
         }
       })
-      
-      if (!roadsLayerFound) {
-        console.log('ℹ️ لایه راه‌ها هنوز بارگذاری نشده، دوباره تلاش می‌شود...')
-        setTimeout(() => {
-          map.eachLayer((layer: any) => {
-            if (layer._geojson && layer._geojson.features && layer._geojson.features.length > 0) {
-              const firstFeature = layer._geojson.features[0]
-              if (firstFeature && firstFeature.geometry && 
-                  (firstFeature.geometry.type === 'LineString' || 
-                   firstFeature.geometry.type === 'MultiLineString')) {
-                layer.bringToFront()
-                console.log('✅ لایه راه‌ها به جلو آورده شد (تلاش دوم)')
-              }
-            }
-          })
-        }, 1000)
-      }
     }
   }, 300)
+}
+
+function onRoadsReady(layer: any) {
+  layer.bringToFront()
 }
 
 // ============================================
@@ -315,7 +371,6 @@ async function loadData() {
     
     console.log('✅ داده‌های بلوک بارگذاری شد:', blocksData.value.features?.length || 0, 'بلوک')
     
-    // محاسبه امتیاز نهایی
     if (blocksData.value && blocksData.value.features) {
       const blocks = blocksData.value.features.map((f: any) => f.properties)
       const { calculateScores } = useSuitability(blocks)
@@ -334,24 +389,6 @@ async function loadData() {
       if (roadsResp.ok) {
         roadsData.value = await roadsResp.json()
         console.log('✅ لایه راه‌ها بارگذاری شد:', roadsData.value.features?.length || 0, 'راه')
-        
-        // بعد از بارگذاری راه‌ها، آن‌ها را به جلو بیاور
-        setTimeout(() => {
-          if (mapRef.value?.leafletObject) {
-            const map = mapRef.value.leafletObject
-            map.eachLayer((layer: any) => {
-              if (layer._geojson && layer._geojson.features && layer._geojson.features.length > 0) {
-                const firstFeature = layer._geojson.features[0]
-                if (firstFeature && firstFeature.geometry && 
-                    (firstFeature.geometry.type === 'LineString' || 
-                     firstFeature.geometry.type === 'MultiLineString')) {
-                  layer.bringToFront()
-                  console.log('✅ لایه راه‌ها به جلو آورده شد (پس از بارگذاری)')
-                }
-              }
-            })
-          }
-        }, 500)
       } else {
         console.warn('⚠️ لایه راه‌ها پیدا نشد')
         roadsData.value = { type: 'FeatureCollection', features: [] }
@@ -359,6 +396,51 @@ async function loadData() {
     } catch (error) {
       console.warn('⚠️ خطا در بارگذاری راه‌ها:', error)
       roadsData.value = { type: 'FeatureCollection', features: [] }
+    }
+
+    // ✅ بارگذاری فضای سبز
+    try {
+      const greenResp = await fetch('/data/green_spaces.geojson')
+      if (greenResp.ok) {
+        greenSpacesData.value = await greenResp.json()
+        console.log('✅ لایه فضای سبز بارگذاری شد:', greenSpacesData.value.features?.length || 0, 'مورد')
+      } else {
+        console.warn('⚠️ لایه فضای سبز پیدا نشد')
+        greenSpacesData.value = { type: 'FeatureCollection', features: [] }
+      }
+    } catch (error) {
+      console.warn('⚠️ خطا در بارگذاری فضای سبز:', error)
+      greenSpacesData.value = { type: 'FeatureCollection', features: [] }
+    }
+
+    // ✅ بارگذاری مراکز صنعتی
+    try {
+      const industriesResp = await fetch('/data/industries.geojson')
+      if (industriesResp.ok) {
+        industriesData.value = await industriesResp.json()
+        console.log('✅ لایه مراکز صنعتی بارگذاری شد:', industriesData.value.features?.length || 0, 'مورد')
+      } else {
+        console.warn('⚠️ لایه مراکز صنعتی پیدا نشد')
+        industriesData.value = { type: 'FeatureCollection', features: [] }
+      }
+    } catch (error) {
+      console.warn('⚠️ خطا در بارگذاری مراکز صنعتی:', error)
+      industriesData.value = { type: 'FeatureCollection', features: [] }
+    }
+
+    // ✅ بارگذاری آلودگی
+    try {
+      const pollutionResp = await fetch('/data/pollution.geojson')
+      if (pollutionResp.ok) {
+        pollutionData.value = await pollutionResp.json()
+        console.log('✅ لایه آلودگی بارگذاری شد:', pollutionData.value.features?.length || 0, 'نقطه')
+      } else {
+        console.warn('⚠️ لایه آلودگی پیدا نشد')
+        pollutionData.value = { type: 'FeatureCollection', features: [] }
+      }
+    } catch (error) {
+      console.warn('⚠️ خطا در بارگذاری آلودگی:', error)
+      pollutionData.value = { type: 'FeatureCollection', features: [] }
     }
     
     console.log('✅ بارگذاری کامل شد')
@@ -397,21 +479,35 @@ onMounted(() => {
 .map-wrapper {
   width: 100%;
   height: 100%;
+  min-width: 0;
   position: relative;
+  overflow: hidden;
+  border-radius: inherit;
+}
+
+.map-wrapper :deep(.leaflet-container) {
+  width: 100%;
+  height: 100%;
+  background: #e8eef1;
 }
 
 .custom-popup {
   position: absolute;
-  bottom: 30px;
-  right: 30px;
+  bottom: 18px;
+  right: 18px;
+  width: min(380px, calc(100% - 36px));
   background: white;
   padding: 20px;
-  border-radius: 12px;
+  border: 1px solid #dfe7ec;
+  border-radius: 16px;
   box-shadow: 0 10px 40px rgba(0,0,0,0.2);
   max-width: 380px;
-  min-width: 300px;
+  min-width: 0;
   z-index: 1000;
   max-height: 80vh;
+  direction: rtl;
+  text-align: right;
+  overflow-x: hidden;
   overflow-y: auto;
   animation: slideUp 0.3s ease;
 }
@@ -430,13 +526,14 @@ onMounted(() => {
 .custom-popup .close-btn {
   position: absolute;
   top: 8px;
-  right: 12px;
+  left: 10px;
+  display: grid;
+  place-items: center;
   background: none;
   border: none;
-  font-size: 20px;
   cursor: pointer;
   color: #666;
-  padding: 4px 8px;
+  padding: 6px;
   border-radius: 4px;
   transition: background 0.2s;
 }
@@ -461,15 +558,23 @@ onMounted(() => {
 
 .score-item {
   display: grid;
-  grid-template-columns: 100px 1fr 50px;
+  grid-template-columns: minmax(108px, auto) minmax(56px, 1fr) 42px;
   align-items: center;
   gap: 10px;
   font-size: 14px;
 }
 
-.score-item span:first-child {
+.score-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   color: #374151;
   font-weight: 500;
+}
+
+.score-label svg {
+  flex: 0 0 auto;
+  color: #0f766e;
 }
 
 .progress-bar {
@@ -522,5 +627,20 @@ onMounted(() => {
   font-size: 14px;
   text-align: center;
   font-weight: 500;
+}
+
+@media (max-width: 520px) {
+  .custom-popup {
+    right: 10px;
+    bottom: 10px;
+    width: calc(100% - 20px);
+    padding: 16px;
+  }
+
+  .score-item {
+    grid-template-columns: minmax(100px, auto) minmax(45px, 1fr) 38px;
+    gap: 7px;
+    font-size: 12px;
+  }
 }
 </style>
